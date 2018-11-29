@@ -1,0 +1,13 @@
+preprocess
+data
+logs
+**/__pycache__
+models
+**/*.swp
+.env
+.ipynb_checkpoints
+outputs/demos
+pretrained_models
+outputs
+list
+logs*
