@@ -135,7 +135,7 @@ I divided the dataset into training and testing with balanced label distribution
 ![image](https://user-images.githubusercontent.com/17702664/49162055-72ee3a00-f36d-11e8-99d3-81ea6431369d.png)
 
 
-## Step 5. Train a model
+## Step 5. Train
 
 ```
 $ CUDA_VISIBLE_DEVICES=0 python train.py
@@ -150,6 +150,12 @@ $ CUDA_VISIBLE_DEVICES=0 python train.py
   | C3D | 0.5455 | 0.5162 | 0.5299 |
   
   ![image](https://user-images.githubusercontent.com/17702664/49209459-e2ac0580-f3fd-11e8-9b5a-39d6a85aac88.png)
+
+* Examples
+  
+  ![image](https://user-images.githubusercontent.com/17702664/49210335-33bcf900-f400-11e8-9e91-399463e5eabd.png)
+  
+  ![image](https://user-images.githubusercontent.com/17702664/49210446-71ba1d00-f400-11e8-9981-4a5450582fc1.png)
 
 ## Step 6. Predict & Demo
 
