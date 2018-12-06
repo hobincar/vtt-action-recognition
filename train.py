@@ -5,11 +5,11 @@ import cv2
 import numpy as np
 import tensorflow as tf
 
-from nets import c3d as network
 from config import TrainConfig as C
-from dataset import load_train_dataset, load_test_dataset
+from dataset import load_dataset
 from demo import generate_frame
 from logger import Logger
+from nets import c3d as network
 
 
 # Basic model parameters
@@ -115,7 +115,7 @@ def pred_real_to_table(preds, reals, prefix=""):
     return lines
 
 
-def clip_summary_with_text(clip, actual, pred):
+def clip_summary_with_text(clip, actual, pred, bboxes):
     actual_labels = np.where(actual == 1)[0]
     ground_truths = [ C.idx2rep[str(a)] for a in actual_labels ]
 
@@ -127,29 +127,33 @@ def clip_summary_with_text(clip, actual, pred):
 
     new_clip = []
     for frame in clip:
-        new_frame = cv2.resize(frame, dsize=(1280, 720), interpolation=cv2.INTER_AREA)
-        new_frame = generate_frame(new_frame, ground_truths, actions, pane_width=1000)
+        ow, oh, op = 1280, 720, 1000
+        r = 0.67
+        w, h, p = int(ow * r), int(oh * r), int(op * r)
+        new_frame = cv2.resize(frame, dsize=(w, h), interpolation=cv2.INTER_AREA)
+        new_frame = generate_frame(new_frame, ground_truths, actions, pane_width=p)
         new_clip.append(new_frame)
     new_clip = np.asarray(new_clip)
     return new_clip
 
 
-def train_log(clips, preds, gts, step):
+def train_log(clips, preds, gts, bboxes, step):
     precision, recall, f1score = score(preds, gts)
     pred_summary = pred_real_to_table(preds, gts)
-    gif_summary = clip_summary_with_text(clips[0], gts[0], preds[0])
+    gif_summary = clip_summary_with_text(clips[0], gts[0], preds[0], bboxes)
     summary_writer.scalar("train/precision", precision, step)
     summary_writer.scalar("train/recall", recall, step)
     summary_writer.scalar("train/f1score", f1score, step)
     summary_writer.text("train/prediction", pred_summary, step)
-    clip_postfix = "{} ~ {}".format(step / C.train_log_every // 10 * 10, step / C.test_log_every // 10 * 10 * 2 - 1)
-    summary_writer.gif("train/clip/{}".format(clip_postfix), gif_summary, step)
+    clip_from = step // C.train_log_every // 10 * C.train_log_every * 10
+    clip_to = (step // C.train_log_every // 10 + 1) * C.train_log_every * 10
+    summary_writer.gif("train/clip/{} ~ {}".format(clip_from, clip_to), gif_summary, step)
 
 
-def test_log(clips, preds, gts, step):
+def test_log(clips, preds, gts, bboxes, step):
     precision, recall, f1score = score(preds, gts)
     pred_summary = pred_real_to_table(preds, gts)
-    gif_summary = clip_summary_with_text(clips[0], gts[0], preds[0])
+    gif_summary = clip_summary_with_text(clips[0], gts[0], preds[0], bboxes)
     summary_writer.scalar("test/precision", precision, step)
     summary_writer.scalar("test/recall", recall, step)
     summary_writer.scalar("test/f1score", f1score, step)
@@ -291,13 +295,13 @@ def run_training():
         saver = tf.train.Saver(list(weights.values()) + list(biases.values()))
 
         # Load train dataset
-        train_dataset = load_train_dataset(C.train_data_fpath, N_GPU * C.batch_size)
+        train_dataset = load_dataset(C.train_list_fpath, N_GPU * C.batch_size, shuffle=True, repeat=True)
         train_iterator = train_dataset.make_initializable_iterator()
         train_next_batch = train_iterator.get_next()
         sess.run(train_iterator.initializer)
 
         # Load test dataset
-        test_dataset = load_test_dataset(C.test_data_fpath, N_GPU * C.batch_size, shuffle=True, repeat=True)
+        test_dataset = load_dataset(C.test_list_fpath, N_GPU * C.batch_size, shuffle=True, repeat=True)
         test_iterator = test_dataset.make_initializable_iterator()
         test_next_batch = test_iterator.get_next()
         sess.run(test_iterator.initializer)
@@ -314,7 +318,7 @@ def run_training():
 
         # Train
         for step in range(1, C.n_iterations + 1):
-            train_clips, train_labels = sess.run(train_next_batch)
+            train_clips, train_labels, _, _ = sess.run(train_next_batch)
             sess.run(train_model["train_op"], feed_dict={
                 train_model["images_placeholder"]: train_clips,
                 train_model["labels_placeholder"]: train_labels,
@@ -322,7 +326,7 @@ def run_training():
 
             # Log train
             if step % C.train_log_every == 0:
-                train_clips, train_labels = sess.run(train_next_batch)
+                train_clips, train_labels, train_bboxes, _ = sess.run(train_next_batch)
                 preds, acc, loss_val = sess.run(
                     [train_model["logits"], train_model["accuracy"], train_model["loss"]],
                     feed_dict={
@@ -334,11 +338,11 @@ def run_training():
                 summary_writer.scalar("train/accuracy", acc, step)
                 summary_writer.scalar("train/loss", loss_val, step)
 
-                train_log(train_clips, preds, train_labels, step)
+                train_log(train_clips, preds, train_labels, train_bboxes, step)
 
             # Log test
             if step % C.test_log_every == 0:
-                test_clips, test_labels, test_frames = sess.run(test_next_batch)
+                test_clips, test_labels, test_bboxes, test_frames = sess.run(test_next_batch)
                 preds, acc, loss_val = sess.run(
                     [test_model["logits"], test_model["accuracy"], test_model["loss"]],
                     feed_dict={
@@ -350,7 +354,7 @@ def run_training():
                 summary_writer.scalar("test/accuracy", acc, step)
                 summary_writer.scalar("test/loss", loss_val, step)
 
-                test_log(test_clips, preds, test_labels, step)
+                test_log(test_clips, preds, test_labels, test_bboxes, step)
 
             # Save a checkpoint
             if step % C.save_every == 0:

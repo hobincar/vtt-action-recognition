@@ -9,7 +9,7 @@ import numpy as np
 
 from nets import c3d as model
 from config import PredConfig as C
-from dataset import load_train_dataset, load_test_dataset
+from dataset import load_dataset
 
 
 # Basic model parameters
@@ -43,7 +43,7 @@ def _variable_with_weight_decay(name, shape, stddev, wd):
     return var
 
 
-def build_result_for_demo(frame, labels, topk_idx, topk_score):
+def build_result_for_demo(frame, bbox, labels, topk_idx, topk_score):
     ground_truths = np.where(labels == 1)[0]
     ground_truths = [ C.idx2rep[str(idx)] for idx in ground_truths ]
 
@@ -54,33 +54,50 @@ def build_result_for_demo(frame, labels, topk_idx, topk_score):
 
     result = {
         "frame": frame,
+        "bbox": bbox,
         "ground_truths": ground_truths,
         "actions": actions,
     }
     return result
 
 
-def build_results_for_integration(frame, labels, topk_idx, topk_score):
+def build_result_for_integration(action_idx, frame_idx, bbox=None):
+    result = {}
+
+    result["type"] = "behavior"
+
+    action_idx = str(action_idx)
+    action = C.idx2rep[action_idx]
+    result["class"] = action
+
+    seconds = frame_idx / C.fps_used_to_extract_frames
+    seconds = round(seconds, 1)
+    result["seconds"] = seconds
+
+    if bbox is None:
+        coordinates = [ 0, 0, int(C.full_shape['width']), int(C.full_shape['height']) ]
+    else:
+        coordinates = [ int(c) for c in bbox ]
+    object_indicator = { "coordinates": coordinates }
+    result["object"] = object_indicator
+
+    return result
+
+
+def build_results_for_integration(frame, bbox, labels, topk_idx, topk_score):
+    if not C.use_bbox:
+        bbox = None
+
     results = []
     for idx, score in zip(topk_idx, topk_score):
         if score < 0.5: continue
-
-        result = {
-            "type": "behavior",
-            "class": C.idx2rep[str(idx)],
-            "seconds": frame / C.fps_used_to_extract_frames,
-            "object": { "coordinates": [ 0, 0, 1280, 720 ] },
-        }
+        result = build_result_for_integration(idx, frame, bbox)
         results.append(result)
 
     if len(results) == 0:
-        result = {
-            "type": "behavior",
-            "class": C.idx2rep[str(topk_idx[0])],
-            "seconds": frame / C.fps_used_to_extract_frames,
-            "object": { "coordinates": [ 0, 0, 1280, 720 ] },
-        }
-
+        top1_idx = topk_idx[0]
+        result = build_result_for_integration(top1_idx, frame, bbox)
+        results.append(result)
     return results
 
 
@@ -137,7 +154,7 @@ def run_test():
     saver = tf.train.Saver()
     saver.restore(sess, C.model_fpath)
 
-    os.makedirs(C.prediction_dpath, exist_ok=True)
+    os.makedirs(os.path.dirname(C.prediction_fpath_tpl), exist_ok=True)
     os.makedirs(C.integration_dpath, exist_ok=True)
 
     pbar = tqdm(total=sum([ len(episodes) for episodes in C.episodes_list ]))
@@ -150,16 +167,21 @@ def run_test():
             integration_results = []
     
             # Load train dataset
-            dataset = load_test_dataset(list_file_fpath, N_GPU * C.batch_size, shuffle=False, repeat=False)
+            dataset = load_dataset(list_file_fpath, N_GPU * C.batch_size, shuffle=False, repeat=False)
             iterator = dataset.make_initializable_iterator()
             next_batch = iterator.get_next()
             sess.run(iterator.initializer)
     
             while True:
                 try:
-                    clips, labels, frames = sess.run(next_batch)
+                    clips, labels, bboxes, frames = sess.run(next_batch)
                 except tf.errors.OutOfRangeError:
                     break
+
+                if C.use_bbox:
+                    bboxes = bboxes['resize2original']
+                    bboxes = [ [ x1, y1, x2, y2 ] for x1, y1, x2, y2 in zip(bboxes['min_x'], bboxes['min_y'], bboxes['max_x'], bboxes['max_y']) ]
+                    bboxes = [ [ int(c) for c in bbox ] for bbox in bboxes ]
                 frames = frames.tolist()
     
                 predict_scores = norm_scores.eval(
@@ -169,12 +191,22 @@ def run_test():
                 topk_idxs = np.argsort(predict_scores, axis=1)[:, -C.topk:]
                 topk_scores = np.take(predict_scores, topk_idxs)
                 topk_scores = topk_scores.tolist()
-                for frame, labels, topk_idx, topk_score in zip(frames, labels, topk_idxs, topk_scores):
-                    result1 = build_result_for_demo(frame, labels, topk_idx, topk_score)
-                    demo_results.append(result1)
+                if C.use_bbox:
+                    for frame, bbox, labels, topk_idx, topk_score in zip(frames, bboxes, labels, topk_idxs, topk_scores):
+                        result1 = build_result_for_demo(frame, bbox, labels, topk_idx, topk_score)
+                        demo_results.append(result1)
 
-                    result2 = build_results_for_integration(frame, labels, topk_idx, topk_score)
-                    integration_results += result2
+                        result2 = build_results_for_integration(frame, bbox, labels, topk_idx, topk_score)
+                        integration_results += result2
+                else:
+                    for frame, labels, topk_idx, topk_score in zip(frames, labels, topk_idxs, topk_scores):
+                        result1 = build_result_for_demo(frame, None, labels, topk_idx, topk_score)
+                        demo_results.append(result1)
+
+                        result2 = build_results_for_integration(frame, None, labels, topk_idx, topk_score)
+                        integration_results += result2
+
+
 
             # For demo videos
             episode_id = "S{:02d}_EP{:02d}".format(season, episode)
