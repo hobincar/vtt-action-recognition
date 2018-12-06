@@ -127,7 +127,7 @@ So, I constructed dataset through following steps.
 ## Step 4. Split dataset into train & test
 
 ```
-$ python -m utils.list
+$ python -m lists.train_test
 ```
 
 I divided the dataset into training and testing with balanced label distribution in mind. Since this project deals with a multi-label classification task, I cannot strictly divide all labels into a train and a test dataset with same ratio. So I tried to more fairly divide data which has more few clips.
@@ -157,23 +157,23 @@ $ CUDA_VISIBLE_DEVICES=0 python train.py
   
   ![image](https://user-images.githubusercontent.com/17702664/49210446-71ba1d00-f400-11e8-9981-4a5450582fc1.png)
 
-## Step 6. Predict & Demo
-
-* For prediction
+## Step 6. Predict
 
   ```
+  $ python -m lists.episodes
   $ CUDA_VISIBLE_DEVICES=0 python predict.py
   ```
   
   It will generate **json files** in `<project root>/outputs/predictions` used to generate demo videos, and **jsonlines files** in `<project root>/outputs/integration` for integration. The json schema follows one defined at https://github.com/uilab-vtt/knowledge-graph-input
 
-* For demo
+
+## Step 7. Demo
   
   ```
   $ python demo.py
   ```
   
-  It will generate **demo videos** in `<project root>/outputs/demo" for each *friends* episode.
+  By using files generated in **Step 6**, it will generate **demo videos** in `<project root>/outputs/demo" for each *friends* episode.
 
 
 # References
