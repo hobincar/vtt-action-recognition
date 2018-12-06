@@ -182,6 +182,8 @@ def run_test():
                     bboxes = bboxes['resize2original']
                     bboxes = [ [ x1, y1, x2, y2 ] for x1, y1, x2, y2 in zip(bboxes['min_x'], bboxes['min_y'], bboxes['max_x'], bboxes['max_y']) ]
                     bboxes = [ [ int(c) for c in bbox ] for bbox in bboxes ]
+                else:
+                    bboxes = [ None for _ in range(len(clips)) ]
                 frames = frames.tolist()
     
                 predict_scores = norm_scores.eval(
@@ -191,21 +193,12 @@ def run_test():
                 topk_idxs = np.argsort(predict_scores, axis=1)[:, -C.topk:]
                 topk_scores = np.take(predict_scores, topk_idxs)
                 topk_scores = topk_scores.tolist()
-                if C.use_bbox:
-                    for frame, bbox, labels, topk_idx, topk_score in zip(frames, bboxes, labels, topk_idxs, topk_scores):
-                        result1 = build_result_for_demo(frame, bbox, labels, topk_idx, topk_score)
-                        demo_results.append(result1)
+                for frame, bbox, labels, topk_idx, topk_score in zip(frames, bboxes, labels, topk_idxs, topk_scores):
+                    result1 = build_result_for_demo(frame, bbox, labels, topk_idx, topk_score)
+                    demo_results.append(result1)
 
-                        result2 = build_results_for_integration(frame, bbox, labels, topk_idx, topk_score)
-                        integration_results += result2
-                else:
-                    for frame, labels, topk_idx, topk_score in zip(frames, labels, topk_idxs, topk_scores):
-                        result1 = build_result_for_demo(frame, None, labels, topk_idx, topk_score)
-                        demo_results.append(result1)
-
-                        result2 = build_results_for_integration(frame, None, labels, topk_idx, topk_score)
-                        integration_results += result2
-
+                    result2 = build_results_for_integration(frame, bbox, labels, topk_idx, topk_score)
+                    integration_results += result2
 
 
             # For demo videos
