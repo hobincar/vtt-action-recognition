@@ -1,0 +1,118 @@
+{
+  "Drinking ": {
+    "n_clips": 68,
+    "n_frames": 1705
+  },
+  "Holding something": {
+    "n_clips": 4482,
+    "n_frames": 96949
+  },
+  "Pointing out": {
+    "n_clips": 207,
+    "n_frames": 4506
+  },
+  "Putting arms around each other's shoulder": {
+    "n_clips": 57,
+    "n_frames": 1164
+  },
+  "cleaning up": {
+    "n_clips": 99,
+    "n_frames": 2092
+  },
+  "cooking": {
+    "n_clips": 115,
+    "n_frames": 2757
+  },
+  "cutting ": {
+    "n_clips": 6,
+    "n_frames": 72
+  },
+  "dance": {
+    "n_clips": 94,
+    "n_frames": 5032
+  },
+  "destroy something": {
+    "n_clips": 6,
+    "n_frames": 39
+  },
+  "eating": {
+    "n_clips": 369,
+    "n_frames": 7435
+  },
+  "find something": {
+    "n_clips": 65,
+    "n_frames": 1479
+  },
+  "high-five": {
+    "n_clips": 54,
+    "n_frames": 358
+  },
+  "hugging": {
+    "n_clips": 98,
+    "n_frames": 2887
+  },
+  "kissing": {
+    "n_clips": 43,
+    "n_frames": 1192
+  },
+  "look back on": {
+    "n_clips": 696,
+    "n_frames": 11967
+  },
+  "nodding": {
+    "n_clips": 30,
+    "n_frames": 360
+  },
+  "opening door": {
+    "n_clips": 179,
+    "n_frames": 3646
+  },
+  "phone call": {
+    "n_clips": 307,
+    "n_frames": 7698
+  },
+  "playing guitar": {
+    "n_clips": 35,
+    "n_frames": 1050
+  },
+  "pushing away": {
+    "n_clips": 23,
+    "n_frames": 462
+  },
+  "shaking hands": {
+    "n_clips": 26,
+    "n_frames": 416
+  },
+  "singing": {
+    "n_clips": 40,
+    "n_frames": 901
+  },
+  "sitting down": {
+    "n_clips": 1438,
+    "n_frames": 31957
+  },
+  "smoking": {
+    "n_clips": 11,
+    "n_frames": 249
+  },
+  "standing": {
+    "n_clips": 2277,
+    "n_frames": 57873
+  },
+  "walking ": {
+    "n_clips": 678,
+    "n_frames": 17520
+  },
+  "watching": {
+    "n_clips": 214,
+    "n_frames": 3088
+  },
+  "waving hands": {
+    "n_clips": 78,
+    "n_frames": 603
+  },
+  "wearing lipstick": {
+    "n_clips": 2,
+    "n_frames": 148
+  }
+}

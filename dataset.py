@@ -19,7 +19,7 @@ def __merge(dups):
         assert dup_episode_id == episode_id
         assert dup_start_frame == start_frame
         assert dup_end_frame == end_frame
-        labels += dup_labels
+        labels += dup_labels.split(',')
     labels = list(set(labels))
     bbox = [ "0", "0", str(C.full_shape["width"]), str(C.full_shape["height"]) ]
 
@@ -36,6 +36,7 @@ def merge_data_along_frame(data):
         merge_dict[id].append(d)
 
     merged_data = list(map(__merge, merge_dict.values()))
+    merged_data = sorted(merged_data, key=lambda d: int(d[1]))
     return merged_data
 
 

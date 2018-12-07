@@ -165,6 +165,22 @@ def generate_demo(season, episode):
         actions = pred["actions"]
 
         frame = load_frame(season, episode, frame_number)
+
+        """ TEMP """
+        bbox_fpath = "data/friends_json/bbox/person/S{:02d}_EP{:02d}/{:05d}.json".format(season, episode, frame_number)
+        with open(bbox_fpath, 'r') as fin:
+            bboxes = json.load(fin)
+        bboxes = [ bbox for bbox in bboxes if bbox['confidence'] > 0.5 and bbox['label'] == 'person' ]
+        for bbox in bboxes:
+            x1, y1 = bbox['topleft']['x'], bbox['topleft']['y']
+            x2, y2 = bbox['bottomright']['x'], bbox['bottomright']['y']
+            frame = cv2.rectangle(
+                frame,
+                pt1=( x1, y1 ),
+                pt2=( x2, y2 ),
+                color=(0, 255, 255),
+                thickness=5)
+        """ TEMP """
         frame = generate_frame(frame, ground_truths, actions, pane_width)
         vout.write(frame)
     vout.release()
@@ -226,7 +242,6 @@ def generate_demo_with_bbox(season, episode):
         frame = generate_frame_with_bbox(frame, ground_truths_list, actions_list, bbox_list, pane_width)
         vout.write(frame)
     vout.release()
-
 
 
 def generate_demos():
