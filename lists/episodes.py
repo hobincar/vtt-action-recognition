@@ -9,8 +9,8 @@ import os
 
 from tqdm import tqdm
 
-from lists.utils import load_annotation, parse_episode, parse_frame_number, timestr_to_seconds, \
-                        get_endpoints_from_median_frame, merge_duplicates
+from lists.utils import load_annotation, parse_frame_number, timestr_to_seconds, get_endpoints_from_median_frame, \
+                        merge_duplicates
 from config import ListConfig as C
 
 
@@ -32,7 +32,7 @@ def parse_annotation(annotation):
         if action in C.act2idx:
             label = C.act2idx[action]
             label = str(label)
-            rect = info["full_rect"]
+            rect = info[C.bbox_tag]
             try:
                 for bbox_label in C.bbox_labels:
                     int(rect[bbox_label])

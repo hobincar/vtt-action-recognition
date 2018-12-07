@@ -13,12 +13,6 @@ def load_annotation(season, episode):
     return annotation
 
 
-def parse_episode(fname):
-    p = parse.compile("{}.json")
-    episode = p.parse(fname)[0]
-    return episode
-
-
 def parse_frame_number(fname):
     p = parse.compile("{:d}.jpg")
     frame_number = p.parse(fname)[0]
