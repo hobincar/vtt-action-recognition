@@ -7,6 +7,8 @@ import numpy as np
 
 
 def weight_classes(list_fpath, n_actions):
+    if not os.path.exists(list_fpath): return None
+
     with open(list_fpath, 'r') as fin:
         data = fin.readlines()
 
@@ -26,9 +28,6 @@ def weight_classes(list_fpath, n_actions):
 
 
 class CommonConfig:
-    seasons = [ 1 ]
-    episodes_list = [ range(1, 24) ]
-
     data_root_dpath = "data"
     friends_root_dpath = os.path.join(data_root_dpath, "friends_trimmed")
     frame_root_dpath = os.path.join(friends_root_dpath, "frames")
@@ -53,6 +52,8 @@ class CommonConfig:
         act2idx = json.load(fin)
     with open('data/idx2rep.json', 'r') as fin:
         idx2rep = json.load(fin)
+    with open('data/rep2idx.json', 'r') as fin:
+        rep2idx = json.load(fin)
     with open("data/rep2sta.json") as fin:
         rep2sta = json.load(fin)
     n_actions = len(idx2rep)
@@ -61,30 +62,37 @@ class CommonConfig:
 
     fps_used_to_extract_frames = 5
     n_frames_per_clip = 16
-    train_ratio = 0.7
-
-    use_bbox = False
-    bbox_tag = "full_rect" # [ "face_rect", "full_rect" ]
-    bbox_mode = "fit" # [ "fit", "center_pad" ]
-    bbox_labels = [ "min_x", "min_y", "max_x", "max_y" ]
 
     model_tag = "C3D"
 
-    batch_size = 30
     full_shape = { "width": 1280, "height": 720 } # [ width, height ]
     resize_shape = { "width": 171, "height": 128 } # [ height, width ]
-    crop_size = 112
     n_channels = 3
-
-    topk = 5
 
 
 class ListConfig(CommonConfig):
+    seasons = [ 1 ]
+    episodes_list = [ range(0, 24) ]
+
+    train_ratio = 0.7
+
+    bbox_tag = "full_rect" # [ "face_rect", "full_rect" ]
+    bbox_labels = [ "min_x", "min_y", "max_x", "max_y" ]
+
     n_front = CommonConfig.n_frames_per_clip // 2 - 1
     n_back = CommonConfig.n_frames_per_clip - n_front - 1
 
 
-class TrainConfig(CommonConfig):
+class DataLoaderConfig(CommonConfig):
+    use_bbox = True
+    bbox_mode = "fit" # [ "fit", "center_pad" ]
+
+    crop_size = 112
+
+    batch_size = 30
+
+
+class TrainConfig(DataLoaderConfig):
     n_workers = 4
 
     use_pretrained_model = False
@@ -97,31 +105,39 @@ class TrainConfig(CommonConfig):
     n_iterations = 50000
     train_log_every = 100
     test_log_every = 1000
+    test_log_topk = 5
     save_every = 10000
     moving_average_decay = 0.9999
-    lr_stable = 1e-5
+    lr_stable = 1e-3
     lr_finetune = 1e-3
 
-    class_weights = weight_classes(CommonConfig.train_list_fpath, CommonConfig.n_actions)
+    class_weights = weight_classes(DataLoaderConfig.train_list_fpath, DataLoaderConfig.n_actions)
 
     timestamp = time.strftime("%y%m%d-%H:%M:%S", time.gmtime())
     id = "{} | bbox-{} | lr-st-{}-fn-{} | pt-{} | {}".format(
-        CommonConfig.model_tag, 'ON' if CommonConfig.use_bbox else 'OFF', lr_stable, lr_finetune,
+        DataLoaderConfig.model_tag, 'ON' if DataLoaderConfig.use_bbox else 'OFF', lr_stable, lr_finetune,
         pretrained_model_name if use_pretrained_model else "None", timestamp)
 
     log_root_dpath = "logs"
     log_dpath = os.path.join(log_root_dpath, id)
 
-    model_fpath = os.path.join(CommonConfig.model_root_dpath, id, "model")
+    model_fpath = os.path.join(DataLoaderConfig.model_root_dpath, id, "model")
 
 
-class PredConfig(CommonConfig):
-    model_name = "C3D | lr-st-1e-05-fn-0.001 | pt-None | 181130-10:26:47"
+class PredConfig(DataLoaderConfig):
+    seasons = [ 1 ]
+    episodes_list = [ range(1, 24) ]
+    model_name = "C3D | bbox-ON | lr-st-1e-05-fn-0.001 | pt-None | 181206-19:35:34"
     n_iterations = 30000
-    model_fpath = os.path.join(CommonConfig.model_root_dpath, model_name, "model-{}".format(n_iterations))
-    prediction_fpath_tpl = os.path.join(CommonConfig.prediction_root_dpath, model_name, "S{:02d}_EP{:02d}.json")
+
+    topk = 5
+
+    model_fpath = os.path.join(DataLoaderConfig.model_root_dpath, model_name, "model-{}".format(n_iterations))
+    prediction_fpath_tpl = os.path.join(DataLoaderConfig.prediction_root_dpath, model_name, str(n_iterations),
+                                        "S{:02d}_EP{:02d}.json")
 
 
 class DemoConfig(PredConfig):
-    model_name = "C3D | lr-st-1e-05-fn-0.001 | pt-None | 181130-10:26:47"
-    demo_fpath_tpl = os.path.join(PredConfig.demo_root_dpath, model_name, "S{:02d}_EP{:02d}.mp4")
+    demo_fpath_tpl = os.path.join(PredConfig.demo_root_dpath, PredConfig.model_name, str(PredConfig.n_iterations),
+                                  "S{:02d}_EP{:02d}.mp4")
+
