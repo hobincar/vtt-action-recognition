@@ -100,12 +100,13 @@ class TrainConfig(DataLoaderConfig):
         pretrained_model_dpath = "pretrained_models"
         pretrained_model_name = "sports1m_finetuning_ucf101"
         pretrained_model_fpath = os.path.join(pretrained_model_dpath, "{}.model".format(pretrained_model_name))
-    crop_mean_fpath = "data/crop_mean.npy"
 
     n_iterations = 50000
     train_log_every = 100
     test_log_every = 1000
-    test_log_topk = 5
+    high_prob_threshold = 0.5
+    n_log_every = 5
+    log_topk = 5
     save_every = 10000
     moving_average_decay = 0.9999
     lr_stable = 1e-3

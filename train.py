@@ -3,6 +3,7 @@ import os
 
 import cv2
 import numpy as np
+import sklearn
 import tensorflow as tf
 
 from config import TrainConfig as C
@@ -69,24 +70,6 @@ def tower_acc(logits, labels):
     return accuracy
 
 
-def score(preds, actuals):
-    preds = (preds > 0.5).astype(np.bool)
-    actuals = actuals.astype(np.bool)
-
-    TP = np.logical_and(preds, actuals).sum(axis=1)
-    FP = np.logical_and(preds, ~actuals).sum(axis=1)
-    FN = np.logical_and(~preds, actuals).sum(axis=1)
-
-    precision = TP / (TP + FP)
-    precision[np.isnan(precision)] = 0
-    precision = precision.mean()
-    recall = TP / (TP + FN)
-    recall[np.isnan(recall)] = 0
-    recall = recall.mean()
-    f1score = 2 * (precision * recall) / (precision + recall)
-    return precision, recall, f1score
-
-
 def _variable_on_cpu(name, shape, initializer):
     with tf.device('/cpu:0'):
         var = tf.get_variable(name, shape, initializer=initializer)
@@ -101,26 +84,38 @@ def _variable_with_weight_decay(name, shape, wd):
     return var
 
 
-def pred_real_to_table(preds, reals, prefix=""):
+def evaluate(preds, gts, average):
+    try:
+        precision = sklearn.metrics.precision_score(gts, preds, average=average)
+    except:
+        import ipdb; ipdb.set_trace()
+    recall = sklearn.metrics.recall_score(gts, preds, average=average)
+    f1 = sklearn.metrics.f1_score(gts, preds, average=average)
+    mAP = sklearn.metrics.average_precision_score(gts, preds, average=average)
+    return precision, recall, f1, mAP
+
+
+def build_table_summary(preds, gts, prefix=""):
     lines = [
         [ "real", "pred" ],
     ]
-    for i, (pred, real) in enumerate(zip(preds, reals), 1):
+    for i, (real, pred) in enumerate(zip(gts, preds), 1):
         real_label_indices = np.where(real == 1)[0]
         real_label_indices = ", ".join([ str(i) for i in real_label_indices ])
         pred_sigmoid = 1 / (1 + np.exp(-pred))
-        pred_label_indices = np.argsort(-pred)[:C.topk]
+        pred_label_indices = np.argsort(-pred)[:C.log_topk]
         pred_label_indices = ", ".join([ "{}({:.2f})".format(i, pred_sigmoid[i]) for i in pred_label_indices ])
         lines.append([ real_label_indices, pred_label_indices ])
     return lines
 
 
-def clip_summary_with_text(clip, actual, pred, bboxes):
-    actual_labels = np.where(actual == 1)[0]
-    ground_truths = [ C.idx2rep[str(a)] for a in actual_labels ]
+def build_gif_summary(clip, pred, gt):
+    gt_labels = np.where(gt == 1)[0]
+    ground_truths = [ C.idx2rep[str(a)] for a in gt_labels ]
 
     predict_scores = np.exp(pred) / sum(np.exp(pred))
-    topk_idxs = np.argsort(predict_scores)[-C.topk:]
+    predict_scores[np.isnan(predict_scores)] = 0
+    topk_idxs = np.argsort(predict_scores)[-C.log_topk:]
     topk_actions = [ C.idx2rep[str(idx)] for idx in topk_idxs ]
     topk_scores = predict_scores[topk_idxs]
     actions = [ (action, score) for action, score in zip(topk_actions, topk_scores) ]
@@ -137,30 +132,40 @@ def clip_summary_with_text(clip, actual, pred, bboxes):
     return new_clip
 
 
-def train_log(clips, preds, gts, bboxes, step):
-    precision, recall, f1score = score(preds, gts)
-    pred_summary = pred_real_to_table(preds, gts)
-    gif_summary = clip_summary_with_text(clips[0], gts[0], preds[0], bboxes)
-    summary_writer.scalar("train/precision", precision, step)
-    summary_writer.scalar("train/recall", recall, step)
-    summary_writer.scalar("train/f1score", f1score, step)
-    summary_writer.text("train/prediction", pred_summary, step)
-    clip_from = step // C.train_log_every // 10 * C.train_log_every * 10
-    clip_to = (step // C.train_log_every // 10 + 1) * C.train_log_every * 10
-    summary_writer.gif("train/clip/{} ~ {}".format(clip_from, clip_to), gif_summary, step)
+def train_log(clips, preds, gts, step):
+    gts = np.asarray(gts, dtype=bool)
+    preds = np.asarray(preds)
+    preds = preds > C.high_prob_threshold
+
+    precision, recall, f1, mAP = evaluate(preds, gts, average='macro')
+    summary_writer.scalar("train/precision@{}".format(C.high_prob_threshold), precision, step)
+    summary_writer.scalar("train/recall@{}".format(C.high_prob_threshold), recall, step)
+    summary_writer.scalar("train/f1@{}".format(C.high_prob_threshold), f1, step)
+    summary_writer.scalar("train/mAP", mAP, step)
 
 
-def test_log(clips, preds, gts, bboxes, step):
-    precision, recall, f1score = score(preds, gts)
-    pred_summary = pred_real_to_table(preds, gts)
-    gif_summary = clip_summary_with_text(clips[0], gts[0], preds[0], bboxes)
-    summary_writer.scalar("test/precision", precision, step)
-    summary_writer.scalar("test/recall", recall, step)
-    summary_writer.scalar("test/f1score", f1score, step)
-    summary_writer.text("test/prediction", pred_summary, step)
-    clip_from = step // C.test_log_every // 10 * C.test_log_every * 10
-    clip_to = (step // C.test_log_every // 10 + 1) * C.test_log_every * 10
-    summary_writer.gif("test/clip/{} ~ {}".format(clip_from, clip_to), gif_summary, step)
+def test_log(clips, preds, gts, step):
+    gts = np.asarray(gts)
+    preds = np.asarray(preds)
+
+    b_gts = gts.astype(bool)
+    b_preds = preds > C.high_prob_threshold
+    precision, recall, f1, mAP = evaluate(b_preds, b_gts, average='weighted')
+    summary_writer.scalar("test/precision@{}".format(C.high_prob_threshold), precision, step)
+    summary_writer.scalar("test/recall@{}".format(C.high_prob_threshold), recall, step)
+    summary_writer.scalar("test/f1@{}".format(C.high_prob_threshold), f1, step)
+    summary_writer.scalar("test/mAP", mAP, step)
+
+    log_clips = clips[:C.n_log_every]
+    log_preds = preds[:C.n_log_every]
+    log_gts = gts[:C.n_log_every]
+
+    table_summary = build_table_summary(log_preds, log_gts)
+    summary_writer.text("test/prediction", table_summary, step)
+
+    for i, (clip, gt, pred) in enumerate(zip(log_clips, log_gts, log_preds)):
+        gif_summary = build_gif_summary(clip, pred, gt)
+        summary_writer.gif("test/clip/iter-{}".format(step), gif_summary, i)
 
 
 def build_train_model(weights, biases):
@@ -174,6 +179,7 @@ def build_train_model(weights, biases):
     images_placeholder, labels_placeholder = placeholder_inputs()
     tower_grads_stable = []
     tower_grads_finetune = []
+    losses = []
     logits = []
     opt_stable = tf.train.AdamOptimizer(C.lr_stable)
     opt_finetuning = tf.train.AdamOptimizer(C.lr_finetune)
@@ -192,11 +198,13 @@ def build_train_model(weights, biases):
                 logits=logit,
                 labels=labels_placeholder[i * C.batch_size:(i + 1) * C.batch_size])
 
+            losses.append(loss)
             grads_stable = opt_stable.compute_gradients(loss, varlist_stable)
             grads_finetune = opt_finetuning.compute_gradients(loss, varlist_finetune)
             tower_grads_stable.append(grads_stable)
             tower_grads_finetune.append(grads_finetune)
             logits.append(logit)
+    loss = tf.reduce_mean(losses)
     logits = tf.concat(logits, 0)
     accuracy = tower_acc(logits, labels_placeholder)
     grads_stable = average_gradients(tower_grads_stable)
@@ -221,6 +229,7 @@ def build_train_model(weights, biases):
 
 def build_test_model(weights, biases):
     images_placeholder, labels_placeholder = placeholder_inputs()
+    losses = []
     logits = []
     for i, gpu_index in enumerate(GPU_LIST):
         with tf.device('/gpu:%d' % gpu_index):
@@ -234,7 +243,9 @@ def build_test_model(weights, biases):
                 logits=logit,
                 labels=labels_placeholder[i * C.batch_size:(i + 1) * C.batch_size])
 
+            losses.append(loss)
             logits.append(logit)
+    loss = tf.reduce_mean(losses)
     logits = tf.concat(logits, 0)
     accuracy = tower_acc(logits, labels_placeholder)
 
@@ -277,13 +288,9 @@ def run_training():
                 'out': _variable_with_weight_decay('bout_finetune', [C.n_actions], 0.000),
             }
 
-        # crop_mean = np.load(C.crop_mean_fpath)
-        # crop_mean = crop_mean.reshape([C.n_frames_per_clip, C.crop_size, C.crop_size, 3])
-
         # Build model
         train_model = build_train_model(weights, biases)
         test_model = build_test_model(weights, biases)
-
 
         # Create a session for running Ops on the Graph.
         config = tf.ConfigProto()
@@ -301,10 +308,9 @@ def run_training():
         sess.run(train_iterator.initializer)
 
         # Load test dataset
-        test_dataset = load_dataset(C.test_list_fpath, N_GPU * C.batch_size, shuffle=True, repeat=True)
+        test_dataset = load_dataset(C.test_list_fpath, N_GPU * C.batch_size, shuffle=True, repeat=False)
         test_iterator = test_dataset.make_initializable_iterator()
         test_next_batch = test_iterator.get_next()
-        sess.run(test_iterator.initializer)
 
         # Load a pretrained model (if exists)
         if C.use_pretrained_model:
@@ -326,35 +332,47 @@ def run_training():
 
             # Log train
             if step % C.train_log_every == 0:
-                train_clips, train_labels, train_bboxes, _ = sess.run(train_next_batch)
-                preds, acc, loss_val = sess.run(
-                    [train_model["logits"], train_model["accuracy"], train_model["loss"]],
+                train_clips, train_labels, _, _ = sess.run(train_next_batch)
+                preds, acc, loss = sess.run(
+                    [ train_model["logits"], train_model["accuracy"], train_model["loss"] ],
                     feed_dict={
                         train_model["images_placeholder"]: train_clips,
                         train_model["labels_placeholder"]: train_labels,
                     })
-                loss_val = np.mean(loss_val)
-                print("Train acc.: {:.3f}\tloss: {:.3f}".format(acc, loss_val))
+                print("Train acc.: {:.3f}\tloss: {:.3f}".format(acc, loss))
                 summary_writer.scalar("train/accuracy", acc, step)
-                summary_writer.scalar("train/loss", loss_val, step)
+                summary_writer.scalar("train/loss", loss, step)
 
-                train_log(train_clips, preds, train_labels, train_bboxes, step)
+                train_log(train_clips, preds, train_labels, step)
 
             # Log test
             if step % C.test_log_every == 0:
-                test_clips, test_labels, test_bboxes, test_frames = sess.run(test_next_batch)
-                preds, acc, loss_val = sess.run(
-                    [test_model["logits"], test_model["accuracy"], test_model["loss"]],
-                    feed_dict={
-                        test_model["images_placeholder"]: test_clips,
-                        test_model["labels_placeholder"]: test_labels,
-                    })
-                loss_val = np.mean(loss_val)
-                print("Test acc.: {:.3f}\t loss: {:.3f}".format(acc, loss_val))
-                summary_writer.scalar("test/accuracy", acc, step)
-                summary_writer.scalar("test/loss", loss_val, step)
+                sess.run(test_iterator.initializer)
 
-                test_log(test_clips, preds, test_labels, test_bboxes, step)
+                acc_list, loss_list, pred_list, gt_list = [], [], [], []
+                while True:
+                    try:
+                        test_clips, test_labels, _, test_frames = sess.run(test_next_batch)
+                    except tf.errors.OutOfRangeError:
+                        break
+
+                    preds, acc, loss = sess.run(
+                        [ test_model["logits"], test_model["accuracy"], test_model["loss"] ],
+                        feed_dict={
+                            test_model["images_placeholder"]: test_clips,
+                            test_model["labels_placeholder"]: test_labels,
+                        })
+                    acc_list.append(acc)
+                    loss_list.append(loss)
+                    pred_list += preds.tolist()
+                    gt_list += test_labels.tolist()
+                acc = np.mean(acc_list)
+                loss = np.mean(loss_list)
+                print("Test acc.: {:.3f}\t loss: {:.3f}".format(acc, loss))
+                summary_writer.scalar("test/accuracy", acc, step)
+                summary_writer.scalar("test/loss", loss, step)
+
+                test_log(test_clips, pred_list, gt_list, step)
 
             # Save a checkpoint
             if step % C.save_every == 0:
