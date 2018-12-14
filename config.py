@@ -29,15 +29,14 @@ def weight_classes(list_fpath, n_actions):
 
 
 class CommonConfig:
-    data_root_dpath = "data"
-    friends_root_dpath = os.path.join(data_root_dpath, "friends_trimmed")
-    frame_root_dpath = os.path.join(friends_root_dpath, "frames")
+    data_root_dpath = "data/friends"
+    frame_root_dpath = os.path.join(data_root_dpath, "frames")
     model_root_dpath = "models"
     output_root_dpath = "outputs"
 
     frame_dpath_tpl = os.path.join(frame_root_dpath, "S{:02d}_EP{:02d}")
-    list_dpath = os.path.join(data_root_dpath, "list")
-    annotation_dpath = os.path.join(friends_root_dpath, "annotations")
+    list_dpath = os.path.join(data_root_dpath, "lists")
+    annotation_dpath = os.path.join(data_root_dpath, "annotations")
 
     frame_fpath_tpl = os.path.join(frame_dpath_tpl, "{:05d}.jpg")
     annotation_fpath_tpl = os.path.join(annotation_dpath, "S{:02d}_EP{:02d}.json")
@@ -46,13 +45,13 @@ class CommonConfig:
     train_list_fpath = os.path.join(list_dpath, "friends_train.list")
     test_list_fpath = os.path.join(list_dpath, "friends_test.list")
 
-    with open("data/act2idx.json") as fin:
+    with open(os.path.join(data_root_dpath, "act2idx.json"), 'r') as fin:
         act2idx = json.load(fin)
-    with open('data/idx2rep.json', 'r') as fin:
+    with open(os.path.join(data_root_dpath, "idx2rep.json"), 'r') as fin:
         idx2rep = json.load(fin)
-    with open('data/rep2idx.json', 'r') as fin:
+    with open(os.path.join(data_root_dpath, "rep2idx.json"), 'r') as fin:
         rep2idx = json.load(fin)
-    with open("data/rep2sta.json") as fin:
+    with open(os.path.join(data_root_dpath, "rep2sta.json"), 'r') as fin:
         rep2sta = json.load(fin)
     n_actions = len(idx2rep)
     actions = list(idx2rep.values())
