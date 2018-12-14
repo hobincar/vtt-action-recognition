@@ -27,9 +27,9 @@ For this project, you need to have following two data.
 * Frames of each *Friends* video
   1. Download *Friends* videos.
   2. Extract frames from each video on 5 fps, and locate them on 
-     `<project_root>/data/friends_trimmed/frames/S<season>_EP<episode>/<frame_number>.jpg`
+     `<project_root>/data/friends/frames/S<season>_EP<episode>/<frame_number>.jpg`
   
-     e.g. `<project_root>/data/friends_trimmed/frames/S01_EP01/00001.jpg`
+     e.g. `<project_root>/data/friends/frames/S01_EP01/00001.jpg`
 
 * Annotations
   1. Download two annotation files we got from Konan Technology
@@ -41,12 +41,12 @@ For this project, you need to have following two data.
      
      and locate the json files on the following directory
      
-     `<project_root>/data/friends_trimmed/annotations`
+     `<project_root>/data/friends/annotations`
 
   So, the directory structure will be
   ```
   data/
-    friends_trimmed/
+    friends/
       frames/
         S01_EP01/
           00001.jpg
@@ -173,7 +173,7 @@ $ CUDA_VISIBLE_DEVICES=0 python train.py
   $ python demo.py
   ```
   
-  By using files generated in **Step 6**, it will generate **demo videos** in `<project root>/outputs/demo" for each *friends* episode.
+  By using files generated in **Step 6**, it will generate **demo videos** in `<project root>/outputs/demo" for each *Friends* episode.
 
 
 # References
