@@ -7,7 +7,7 @@ import tensorflow as tf
 from tqdm import tqdm
 import numpy as np
 
-from nets import c3d as model
+from nets import c3d as network
 from config import PredConfig as C
 from dataset import load_dataset
 
@@ -90,7 +90,7 @@ def build_results_for_integration(frame, bbox, labels, topk_idx, topk_score):
 
     results = []
     for idx, score in zip(topk_idx, topk_score):
-        if score < 0.5: continue
+        if score < C.high_prob_threshold: continue
         result = build_result_for_integration(idx, frame, bbox)
         results.append(result)
 
@@ -134,12 +134,13 @@ def run_test():
     logits = []
     for i, gpu_index in enumerate(GPU_LIST):
         with tf.device('/gpu:%d' % gpu_index):
-            logit, _ = model.inference(
-                images_placeholder[i * C.batch_size:(i + 1) * C.batch_size,:,:,:,:],
-                1.,
-                C.batch_size,
-                weights,
-                biases)
+            logit, _ = network.inference(
+                _X=images_placeholder[i * C.batch_size:(i + 1) * C.batch_size,:,:,:,:],
+                _keep_prob=1,
+                _training=False,
+                batch_size=C.batch_size,
+                _weights=weights,
+                _biases=biases)
             logits.append(logit)
     logits = tf.concat(logits, 0)
     norm_scores = tf.nn.sigmoid(logits)

@@ -8,9 +8,10 @@ import os
 import random
 random.seed(42)
 
-from lists.utils import load_annotation, parse_episode, parse_frame_number, timestr_to_seconds, \
-                        get_endpoints_from_median_frame, merge_duplicates
 from config import ListConfig as C
+from lists.utils import load_annotation, parse_frame_number, timestr_to_seconds, get_endpoints_from_median_frame, \
+                        merge_duplicates
+import utils
 
 
 def load_annotations():
@@ -18,7 +19,7 @@ def load_annotations():
     for season, episodes in zip(C.seasons, C.episodes_list):
         for episode in episodes:
             annotation = load_annotation(season, episode)
-            annotations.append(annotation)
+            annotations.append(( season, episode, annotation ))
     return annotations
 
 
@@ -40,7 +41,7 @@ def parse_annotation(annotation):
         if action in C.act2idx:
             label = C.act2idx[action]
             label = str(label)
-            rect = info["full_rect"]
+            rect = info[C.bbox_tag]
             try:
                 for bbox_label in C.bbox_labels:
                     int(rect[bbox_label])
@@ -54,13 +55,12 @@ def parse_annotation(annotation):
     return start_frame, end_frame, labels, bboxes
 
 
-def get_total_list():
-    """ List up frames that is assigned to at least one action """
+def parse_total_list():
+    total_list = []
 
     annotations_list = load_annotations()
-    total_list = []
-    for annotations in annotations_list:
-        episode_id = parse_episode(annotations["file_name"])
+    for season, episode, annotations in annotations_list:
+        episode_id = utils.format_episode_id(season, episode)
 
         frame_fnames = os.listdir(os.path.join(C.frame_root_dpath, episode_id))
         frame_numbers = [ parse_frame_number(fname) for fname in frame_fnames ]
@@ -70,13 +70,7 @@ def get_total_list():
 
             start_end_frames = []
             n_frames = end_frame + 1 - start_frame
-            if n_frames < C.n_frames_per_clip: # frames with a non-related action will be padded
-                median_frame = (start_frame + end_frame) // 2
-                start_frame, end_frame = get_endpoints_from_median_frame(median_frame)
-                if start_frame < 1: continue
-                if end_frame > terminal_frame: continue
-                start_end_frames.append(( start_frame, end_frame ))
-            else:
+            if n_frames >= C.n_frames_per_clip:
                 for median_frame in range(start_frame + C.n_front, end_frame - C.n_back + 1, C.n_frames_per_clip):
                     start_frame, end_frame = get_endpoints_from_median_frame(median_frame)
                     if start_frame < 1: continue
@@ -131,7 +125,7 @@ def generate_train_test_list():
     os.makedirs(C.list_dpath, exist_ok=True)
 
     print("Generating a training and a test list...")
-    total_list = get_total_list()
+    total_list = parse_total_list()
     train_list, test_list = split_list(total_list)
 
     with open(C.train_list_fpath, 'w') as fout:
