@@ -19,9 +19,10 @@ def weight_classes(list_fpath, n_actions):
         for label in labels:
             label_counter[label] += 1
 
-    weights = [ None for _ in range(n_actions) ]
+    weights = [ 1 for _ in range(n_actions) ]
     for class_idx, n_data in label_counter.items():
-        weights[class_idx] = 1 / n_data
+        if n_data == 0: n_data = 1 # TODO: Remove actions which belong to too few clips
+        weights[class_idx] /= n_data
     weights = np.asarray(weights)
     weights = weights / np.sum(weights)
     return weights
@@ -33,17 +34,14 @@ class CommonConfig:
     frame_root_dpath = os.path.join(friends_root_dpath, "frames")
     model_root_dpath = "models"
     output_root_dpath = "outputs"
-    prediction_root_dpath = os.path.join(output_root_dpath, "predictions")
-    demo_root_dpath = os.path.join(output_root_dpath, "demos")
 
+    frame_dpath_tpl = os.path.join(frame_root_dpath, "S{:02d}_EP{:02d}")
     list_dpath = os.path.join(data_root_dpath, "list")
     annotation_dpath = os.path.join(friends_root_dpath, "annotations")
-    integration_dpath = os.path.join(output_root_dpath, "integration", "data", "friends")
 
-    frame_fpath_tpl = os.path.join(frame_root_dpath, "S{:02d}_EP{:02d}/{:05d}.jpg")
+    frame_fpath_tpl = os.path.join(frame_dpath_tpl, "{:05d}.jpg")
     annotation_fpath_tpl = os.path.join(annotation_dpath, "S{:02d}_EP{:02d}.json")
     list_fpath_tpl = os.path.join(list_dpath, "friends_S{:02d}_EP{:02d}.list")
-    integration_fpath_tpl = os.path.join(integration_dpath, "friends_s{:02d}_e{:02d}.jsonl")
 
     train_list_fpath = os.path.join(list_dpath, "friends_train.list")
     test_list_fpath = os.path.join(list_dpath, "friends_test.list")
@@ -69,10 +67,12 @@ class CommonConfig:
     resize_shape = { "width": 171, "height": 128 } # [ height, width ]
     n_channels = 3
 
+    high_prob_threshold = 0.5
+
 
 class ListConfig(CommonConfig):
     seasons = [ 1 ]
-    episodes_list = [ range(0, 24) ]
+    episodes_list = [ range(1, 24) ]
 
     train_ratio = 0.7
 
@@ -84,7 +84,7 @@ class ListConfig(CommonConfig):
 
 
 class DataLoaderConfig(CommonConfig):
-    use_bbox = True
+    use_bbox = False
     bbox_mode = "fit" # [ "fit", "center_pad" ]
 
     crop_size = 112
@@ -101,16 +101,15 @@ class TrainConfig(DataLoaderConfig):
         pretrained_model_name = "sports1m_finetuning_ucf101"
         pretrained_model_fpath = os.path.join(pretrained_model_dpath, "{}.model".format(pretrained_model_name))
 
-    n_iterations = 50000
+    n_iterations = 40000
     train_log_every = 100
     test_log_every = 1000
-    high_prob_threshold = 0.5
     n_log_every = 5
     log_topk = 5
     save_every = 10000
     moving_average_decay = 0.9999
-    lr_stable = 1e-3
-    lr_finetune = 1e-3
+    lr_stable = 1e-5
+    lr_finetune = 1e-5
 
     class_weights = weight_classes(DataLoaderConfig.train_list_fpath, DataLoaderConfig.n_actions)
 
@@ -126,19 +125,26 @@ class TrainConfig(DataLoaderConfig):
 
 
 class PredConfig(DataLoaderConfig):
+    prediction_root_dpath = os.path.join(DataLoaderConfig.output_root_dpath, "predictions")
+
+    integration_dpath = os.path.join(DataLoaderConfig.output_root_dpath, "integration", "data", "friends")
+
+    integration_fpath_tpl = os.path.join(integration_dpath, "friends_s{:02d}_e{:02d}.jsonl")
+
     seasons = [ 1 ]
     episodes_list = [ range(1, 24) ]
-    model_name = "C3D | bbox-ON | lr-st-1e-05-fn-0.001 | pt-None | 181206-19:35:34"
-    n_iterations = 30000
+
+    model_name = "C3D | bbox-OFF | lr-st-1e-05-fn-1e-05 | pt-None | 181208-11:08:24"
+    n_iterations = 40000
+    model_fpath = os.path.join(DataLoaderConfig.model_root_dpath, model_name, "model-{}".format(n_iterations))
+    prediction_fpath_tpl = os.path.join(prediction_root_dpath, model_name, str(n_iterations),
+                                        "S{:02d}_EP{:02d}.json")
 
     topk = 5
 
-    model_fpath = os.path.join(DataLoaderConfig.model_root_dpath, model_name, "model-{}".format(n_iterations))
-    prediction_fpath_tpl = os.path.join(DataLoaderConfig.prediction_root_dpath, model_name, str(n_iterations),
-                                        "S{:02d}_EP{:02d}.json")
-
 
 class DemoConfig(PredConfig):
-    demo_fpath_tpl = os.path.join(PredConfig.demo_root_dpath, PredConfig.model_name, str(PredConfig.n_iterations),
+    demo_root_dpath = os.path.join(PredConfig.output_root_dpath, "demos")
+    demo_fpath_tpl = os.path.join(demo_root_dpath, PredConfig.model_name, str(PredConfig.n_iterations),
                                   "S{:02d}_EP{:02d}.mp4")
 

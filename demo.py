@@ -34,7 +34,7 @@ def generate_frame(frame, ground_truths, actions, pane_width):
     sorted_actions = sorted(actions, key=lambda e: -e[1])
     for i, (action, score) in enumerate(sorted_actions, 3):
         if score < 0.01: break
-        high_probability = score > 0.5
+        high_probability = score > C.high_prob_threshold
 
         frame = cv2.putText(
             frame,
@@ -111,7 +111,7 @@ def generate_frame_with_bbox(frame, ground_truths_list, actions_list, bbox_list,
         sorted_actions = sorted_actions[:n_block_per_char - 1]
         for i, (action, score) in enumerate(sorted_actions, 2):
             if score < 0.01: break
-            high_probability = score > 0.5
+            high_probability = score > C.high_prob_threshold
 
             frame = cv2.putText(
                 frame,

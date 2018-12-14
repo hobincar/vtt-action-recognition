@@ -3,7 +3,7 @@ import os
 
 import cv2
 import numpy as np
-import sklearn
+import sklearn.metrics
 import tensorflow as tf
 
 from config import TrainConfig as C
@@ -30,7 +30,9 @@ def placeholder_inputs():
         C.crop_size,
         C.n_channels))
     labels_placeholder = tf.placeholder(tf.float32, shape=(N_GPU * C.batch_size, C.n_actions))
-    return images_placeholder, labels_placeholder
+    keep_prob_placeholder = tf.placeholder(tf.float32, shape=[])
+    training_placeholder = tf.placeholder(tf.bool)
+    return images_placeholder, labels_placeholder, keep_prob_placeholder, training_placeholder
 
 
 def average_gradients(tower_grads):
@@ -84,17 +86,6 @@ def _variable_with_weight_decay(name, shape, wd):
     return var
 
 
-def evaluate(preds, gts, average):
-    try:
-        precision = sklearn.metrics.precision_score(gts, preds, average=average)
-    except:
-        import ipdb; ipdb.set_trace()
-    recall = sklearn.metrics.recall_score(gts, preds, average=average)
-    f1 = sklearn.metrics.f1_score(gts, preds, average=average)
-    mAP = sklearn.metrics.average_precision_score(gts, preds, average=average)
-    return precision, recall, f1, mAP
-
-
 def build_table_summary(preds, gts, prefix=""):
     lines = [
         [ "real", "pred" ],
@@ -133,11 +124,15 @@ def build_gif_summary(clip, pred, gt):
 
 
 def train_log(clips, preds, gts, step):
-    gts = np.asarray(gts, dtype=bool)
+    gts = np.asarray(gts)
     preds = np.asarray(preds)
-    preds = preds > C.high_prob_threshold
+    b_gts = gts.astype(bool)
+    b_preds = preds > C.high_prob_threshold
 
-    precision, recall, f1, mAP = evaluate(preds, gts, average='macro')
+    precision = sklearn.metrics.precision_score(b_gts, b_preds, average='macro')
+    recall = sklearn.metrics.recall_score(b_gts, b_preds, average='macro')
+    f1 = sklearn.metrics.f1_score(b_gts, b_preds, average='macro')
+    mAP = sklearn.metrics.average_precision_score(b_gts, preds, average='macro')
     summary_writer.scalar("train/precision@{}".format(C.high_prob_threshold), precision, step)
     summary_writer.scalar("train/recall@{}".format(C.high_prob_threshold), recall, step)
     summary_writer.scalar("train/f1@{}".format(C.high_prob_threshold), f1, step)
@@ -147,10 +142,13 @@ def train_log(clips, preds, gts, step):
 def test_log(clips, preds, gts, step):
     gts = np.asarray(gts)
     preds = np.asarray(preds)
-
     b_gts = gts.astype(bool)
     b_preds = preds > C.high_prob_threshold
-    precision, recall, f1, mAP = evaluate(b_preds, b_gts, average='weighted')
+
+    precision = sklearn.metrics.precision_score(b_gts, b_preds, average='weighted')
+    recall = sklearn.metrics.recall_score(b_gts, b_preds, average='weighted')
+    f1 = sklearn.metrics.f1_score(b_gts, b_preds, average='weighted')
+    mAP = sklearn.metrics.average_precision_score(b_gts, preds, average='weighted')
     summary_writer.scalar("test/precision@{}".format(C.high_prob_threshold), precision, step)
     summary_writer.scalar("test/recall@{}".format(C.high_prob_threshold), recall, step)
     summary_writer.scalar("test/f1@{}".format(C.high_prob_threshold), f1, step)
@@ -168,7 +166,7 @@ def test_log(clips, preds, gts, step):
         summary_writer.gif("test/clip/iter-{}".format(step), gif_summary, i)
 
 
-def build_train_model(weights, biases):
+def build_model(weights, biases):
     global_step = tf.get_variable(
         'global_step',
         [],
@@ -176,7 +174,7 @@ def build_train_model(weights, biases):
         trainable=False
     )
 
-    images_placeholder, labels_placeholder = placeholder_inputs()
+    images_placeholder, labels_placeholder, keep_prob_placeholder, training_placeholder = placeholder_inputs()
     tower_grads_stable = []
     tower_grads_finetune = []
     losses = []
@@ -190,7 +188,8 @@ def build_train_model(weights, biases):
             varlist_stable = list( set(list(weights.values()) + list(biases.values())) - set(varlist_finetune) )
             logit, _ = network.inference(
                 _X=images_placeholder[i * C.batch_size:(i + 1) * C.batch_size, :, :, :, :],
-                _dropout=0.5,
+                _keep_prob=keep_prob_placeholder,
+                _training=training_placeholder,
                 batch_size=C.batch_size,
                 _weights=weights,
                 _biases=biases)
@@ -220,41 +219,12 @@ def build_train_model(weights, biases):
         "varlist_finetune": varlist_finetune,
         "images_placeholder": images_placeholder,
         "labels_placeholder": labels_placeholder,
+        "keep_prob_placeholder": keep_prob_placeholder,
+        "training_placeholder": training_placeholder,
         "logits": logits,
         "accuracy": accuracy,
         "loss": loss,
         "train_op": train_op,
-    }
-
-
-def build_test_model(weights, biases):
-    images_placeholder, labels_placeholder = placeholder_inputs()
-    losses = []
-    logits = []
-    for i, gpu_index in enumerate(GPU_LIST):
-        with tf.device('/gpu:%d' % gpu_index):
-            logit, _ = network.inference(
-                _X=images_placeholder[i * C.batch_size:(i + 1) * C.batch_size, :, :, :, :],
-                _dropout=1,
-                batch_size=C.batch_size,
-                _weights=weights,
-                _biases=biases)
-            cross_entropy_loss, weight_decay_loss, loss = tower_loss(
-                logits=logit,
-                labels=labels_placeholder[i * C.batch_size:(i + 1) * C.batch_size])
-
-            losses.append(loss)
-            logits.append(logit)
-    loss = tf.reduce_mean(losses)
-    logits = tf.concat(logits, 0)
-    accuracy = tower_acc(logits, labels_placeholder)
-
-    return {
-        "images_placeholder": images_placeholder,
-        "labels_placeholder": labels_placeholder,
-        "logits": logits,
-        "accuracy": accuracy,
-        "loss": loss,
     }
 
 
@@ -289,8 +259,7 @@ def run_training():
             }
 
         # Build model
-        train_model = build_train_model(weights, biases)
-        test_model = build_test_model(weights, biases)
+        model = build_model(weights, biases)
 
         # Create a session for running Ops on the Graph.
         config = tf.ConfigProto()
@@ -315,7 +284,7 @@ def run_training():
         # Load a pretrained model (if exists)
         if C.use_pretrained_model:
             variables = list(weights.values()) + list(biases.values())
-            restorer = tf.train.Saver(train_model["varlist_stable"])
+            restorer = tf.train.Saver(model["varlist_stable"])
             restorer.restore(sess, C.pretrained_model_fpath)
 
         # Initialize
@@ -325,19 +294,23 @@ def run_training():
         # Train
         for step in range(1, C.n_iterations + 1):
             train_clips, train_labels, _, _ = sess.run(train_next_batch)
-            sess.run(train_model["train_op"], feed_dict={
-                train_model["images_placeholder"]: train_clips,
-                train_model["labels_placeholder"]: train_labels,
+            sess.run(model["train_op"], feed_dict={
+                model["images_placeholder"]: train_clips,
+                model["labels_placeholder"]: train_labels,
+                model["keep_prob_placeholder"]: 0.5,
+                model["training_placeholder"]: True,
             })
 
             # Log train
             if step % C.train_log_every == 0:
                 train_clips, train_labels, _, _ = sess.run(train_next_batch)
                 preds, acc, loss = sess.run(
-                    [ train_model["logits"], train_model["accuracy"], train_model["loss"] ],
+                    [ model["logits"], model["accuracy"], model["loss"] ],
                     feed_dict={
-                        train_model["images_placeholder"]: train_clips,
-                        train_model["labels_placeholder"]: train_labels,
+                        model["images_placeholder"]: train_clips,
+                        model["labels_placeholder"]: train_labels,
+                        model["keep_prob_placeholder"]: 1.0,
+                        model["training_placeholder"]: False,
                     })
                 print("Train acc.: {:.3f}\tloss: {:.3f}".format(acc, loss))
                 summary_writer.scalar("train/accuracy", acc, step)
@@ -357,10 +330,12 @@ def run_training():
                         break
 
                     preds, acc, loss = sess.run(
-                        [ test_model["logits"], test_model["accuracy"], test_model["loss"] ],
+                        [ model["logits"], model["accuracy"], model["loss"] ],
                         feed_dict={
-                            test_model["images_placeholder"]: test_clips,
-                            test_model["labels_placeholder"]: test_labels,
+                            model["images_placeholder"]: test_clips,
+                            model["labels_placeholder"]: test_labels,
+                            model["keep_prob_placeholder"]: 1.0,
+                            model["training_placeholder"]: False,
                         })
                     acc_list.append(acc)
                     loss_list.append(loss)

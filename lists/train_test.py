@@ -70,13 +70,7 @@ def parse_total_list():
 
             start_end_frames = []
             n_frames = end_frame + 1 - start_frame
-            if n_frames < C.n_frames_per_clip: # frames with a non-related action will be padded
-                median_frame = (start_frame + end_frame) // 2
-                start_frame, end_frame = get_endpoints_from_median_frame(median_frame)
-                if start_frame < 1: continue
-                if end_frame > terminal_frame: continue
-                start_end_frames.append(( start_frame, end_frame ))
-            else:
+            if n_frames >= C.n_frames_per_clip:
                 for median_frame in range(start_frame + C.n_front, end_frame - C.n_back + 1, C.n_frames_per_clip):
                     start_frame, end_frame = get_endpoints_from_median_frame(median_frame)
                     if start_frame < 1: continue
