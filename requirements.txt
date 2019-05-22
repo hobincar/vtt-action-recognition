@@ -18,7 +18,6 @@ ipython==7.1.1
 ipython-genutils==0.2.0
 ipywidgets==7.4.2
 jedi==0.13.1
-Jinja2==2.10
 jsonlines==1.2.0
 jsonschema==2.6.0
 jupyter-client==5.2.3
@@ -32,7 +31,6 @@ mock==2.0.0
 moviepy==0.2.3.5
 nbconvert==5.4.0
 nbformat==4.4.0
-notebook==5.7.2
 numpy==1.15.4
 opencv-python==3.4.3.18
 pandas==0.23.4
@@ -67,7 +65,6 @@ tf-estimator-nightly==1.12.0.dev20181119
 tornado==5.1.1
 tqdm==4.28.1
 traitlets==4.3.2
-urllib3==1.24.1
 wcwidth==0.1.7
 webencodings==0.5.1
 Werkzeug==0.14.1
